@@ -1,0 +1,21 @@
+# Git ignore file 
+# Build mappa
+/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Binárisok
+*.exe
+*.dll
+*.lib
+*.a
+*.obj
+
+# JSON mentések
+savegame.json
+
+# IDE fájlok
+.vscode/
+.idea/
