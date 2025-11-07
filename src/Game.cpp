@@ -53,6 +53,10 @@ bool Game::isStalemate() const {
     return false; // későbbre hagyva
 }
 
+const Board& Game::getBoard() const {
+    return board;
+}
+
 void Game::saveToFile(const std::string& filename) {
     json j;
 

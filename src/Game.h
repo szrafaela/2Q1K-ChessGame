@@ -16,6 +16,7 @@ public:
     void undoMove();
     bool isCheckmate() const;
     bool isStalemate() const;
+    const Board& getBoard() const;
 
     // JSON mentés/betöltés
     void saveToFile(const std::string& filename);
