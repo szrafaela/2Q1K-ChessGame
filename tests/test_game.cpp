@@ -1,32 +1,30 @@
 #include <gtest/gtest.h>
 #include <cstdio>
-#include <fstream>
-#include <nlohmann/json.hpp>
-#include <stdexcept>
 #include "Game.h"
 #include "Board.h"
 #include "Piece.h"
 
 namespace {
-using json = nlohmann::json;
-
-json ReadJson(const std::string& filename) {
-    std::ifstream in(filename);
-    if (!in.is_open()) {
-        throw std::runtime_error("Unable to open JSON file: " + filename);
-    }
-    json data;
-    in >> data;
-    return data;
-}
-
-json SaveAndRead(Game& game, const std::string& filename) {
-    game.saveToFile(filename);
-    return ReadJson(filename);
-}
-
 void RemoveFile(const std::string& filename) {
     std::remove(filename.c_str());
+}
+
+void ExpectBoardsEqual(const Board& lhs, const Board& rhs) {
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            auto leftPiece = lhs.getPieceAt(x, y);
+            auto rightPiece = rhs.getPieceAt(x, y);
+            if (!leftPiece || !rightPiece) {
+                EXPECT_EQ(static_cast<bool>(leftPiece), static_cast<bool>(rightPiece))
+                    << "Mismatch at (" << x << ", " << y << ")";
+                continue;
+            }
+            EXPECT_EQ(leftPiece->getType(), rightPiece->getType())
+                << "Type mismatch at (" << x << ", " << y << ")";
+            EXPECT_EQ(leftPiece->getColor(), rightPiece->getColor())
+                << "Color mismatch at (" << x << ", " << y << ")";
+        }
+    }
 }
 } // namespace
 
@@ -100,126 +98,108 @@ TEST(GameIntegrationTest, GameInitializationTest) {
 TEST(GameIntegrationTest, CompleteMoveCycleTest) {
     Game game;
     game.start();
-    const std::string filename = "test_complete_cycle.json";
+    const Board& board = game.getBoard();
 
-    auto initialState = SaveAndRead(game, filename);
-    EXPECT_EQ(initialState["turn"], "white");
-    EXPECT_EQ(initialState["move_count"], 0);
+    EXPECT_TRUE(game.isWhiteTurn());
+    EXPECT_EQ(game.getMoveCount(), 0);
 
     game.makeMove(0, 1, 0, 2);
-    const Board& board = game.getBoard();
     auto whitePawn = board.getPieceAt(0, 2);
     ASSERT_NE(whitePawn, nullptr);
     EXPECT_EQ(whitePawn->getColor(), Color::White);
     EXPECT_EQ(board.getPieceAt(0, 1), nullptr);
-
-    auto afterWhiteMove = SaveAndRead(game, filename);
-    EXPECT_EQ(afterWhiteMove["turn"], "black");
-    EXPECT_EQ(afterWhiteMove["move_count"], 1);
-    EXPECT_EQ(afterWhiteMove["board"][2][0].get<std::string>(), "P");
-    EXPECT_EQ(afterWhiteMove["board"][1][0].get<std::string>(), ".");
+    EXPECT_FALSE(game.isWhiteTurn());
+    EXPECT_EQ(game.getMoveCount(), 1);
 
     game.makeMove(0, 6, 0, 5);
     auto blackPawn = board.getPieceAt(0, 5);
     ASSERT_NE(blackPawn, nullptr);
     EXPECT_EQ(blackPawn->getColor(), Color::Black);
     EXPECT_EQ(board.getPieceAt(0, 6), nullptr);
-
-    auto afterBlackMove = SaveAndRead(game, filename);
-    EXPECT_EQ(afterBlackMove["turn"], "white");
-    EXPECT_EQ(afterBlackMove["move_count"], 2);
-    EXPECT_EQ(afterBlackMove["board"][5][0].get<std::string>(), "p");
-    EXPECT_EQ(afterBlackMove["board"][6][0].get<std::string>(), ".");
-
-    RemoveFile(filename);
+    EXPECT_TRUE(game.isWhiteTurn());
+    EXPECT_EQ(game.getMoveCount(), 2);
 }
 
 TEST(GameIntegrationTest, SaveAndLoadGameStateTest) {
     Game game;
     game.start();
-    const std::string initialSave = "test_save_load_state.json";
-    const std::string compareSave = "test_save_load_state_compare.json";
-    const std::string invalidSave = "test_save_load_state_invalid.json";
-    const std::string continueSave = "test_save_load_state_continue.json";
+    const std::string saveFile = "test_save_load_state.json";
 
-    auto originalState = SaveAndRead(game, initialSave);
     // White moves king forward one square.
     game.makeMove(4, 0, 4, 1);
-    originalState = SaveAndRead(game, initialSave);
-    EXPECT_EQ(originalState["turn"], "black");
-    EXPECT_EQ(originalState["move_count"], 1);
+    EXPECT_FALSE(game.isWhiteTurn());
+    EXPECT_EQ(game.getMoveCount(), 1);
+
+    game.saveToFile(saveFile);
 
     Game loadedGame;
-    loadedGame.loadFromFile(initialSave);
-    auto loadedState = SaveAndRead(loadedGame, compareSave);
-    EXPECT_EQ(originalState, loadedState);
+    loadedGame.loadFromFile(saveFile);
+
+    EXPECT_EQ(loadedGame.getMoveCount(), game.getMoveCount());
+    EXPECT_EQ(loadedGame.getCurrentPlayer(), game.getCurrentPlayer());
+    ExpectBoardsEqual(loadedGame.getBoard(), game.getBoard());
 
     // Attempt to move a white pawn even though it's black's turn.
+    auto whitePawn = loadedGame.getBoard().getPieceAt(0, 1);
+    auto targetSquare = loadedGame.getBoard().getPieceAt(0, 2);
     loadedGame.makeMove(0, 1, 0, 2);
-    auto afterInvalidAttempt = SaveAndRead(loadedGame, invalidSave);
-    EXPECT_EQ(originalState, afterInvalidAttempt);
+    EXPECT_EQ(loadedGame.getMoveCount(), game.getMoveCount());
+    EXPECT_EQ(loadedGame.getCurrentPlayer(), game.getCurrentPlayer());
+    EXPECT_EQ(loadedGame.getBoard().getPieceAt(0, 1), whitePawn);
+    EXPECT_EQ(loadedGame.getBoard().getPieceAt(0, 2), targetSquare);
 
     // Make a valid black move, then ensure state advanced.
     loadedGame.makeMove(0, 6, 0, 5);
-    auto afterValidMove = SaveAndRead(loadedGame, continueSave);
-    EXPECT_EQ(afterValidMove["turn"], "white");
-    EXPECT_EQ(afterValidMove["move_count"], 2);
-    EXPECT_EQ(afterValidMove["board"][5][0].get<std::string>(), "p");
-    EXPECT_EQ(afterValidMove["board"][6][0].get<std::string>(), ".");
+    EXPECT_TRUE(loadedGame.isWhiteTurn());
+    EXPECT_EQ(loadedGame.getMoveCount(), game.getMoveCount() + 1);
+    auto blackPawn = loadedGame.getBoard().getPieceAt(0, 5);
+    ASSERT_NE(blackPawn, nullptr);
+    EXPECT_EQ(blackPawn->getColor(), Color::Black);
+    EXPECT_EQ(loadedGame.getBoard().getPieceAt(0, 6), nullptr);
 
-    RemoveFile(initialSave);
-    RemoveFile(compareSave);
-    RemoveFile(invalidSave);
-    RemoveFile(continueSave);
+    RemoveFile(saveFile);
 }
 
 TEST(GameIntegrationTest, UndoMoveTest) {
     Game game;
     game.start();
-    const std::string filename = "test_undo_state.json";
+    auto blockedPawn = game.getBoard().getPieceAt(4, 1);
+    ASSERT_NE(blockedPawn, nullptr);
 
     game.makeMove(4, 0, 4, 1);
-    auto afterMove = SaveAndRead(game, filename);
-    EXPECT_EQ(afterMove["turn"], "black");
-    EXPECT_EQ(afterMove["move_count"], 1);
-    EXPECT_EQ(afterMove["board"][1][4].get<std::string>(), "K");
-    EXPECT_EQ(afterMove["board"][0][4].get<std::string>(), ".");
-
-    game.undoMove();
-    auto afterUndo = SaveAndRead(game, filename);
-    EXPECT_EQ(afterUndo["turn"], "white");
-    EXPECT_EQ(afterUndo["move_count"], 0);
-    EXPECT_EQ(afterUndo["board"][0][4].get<std::string>(), "K");
-    // Known limitation: the pawn that was overwritten is not restored.
-    EXPECT_EQ(afterUndo["board"][1][4].get<std::string>(), ".");
-
-    const Board& board = game.getBoard();
-    auto king = board.getPieceAt(4, 0);
+    EXPECT_FALSE(game.isWhiteTurn());
+    EXPECT_EQ(game.getMoveCount(), 1);
+    auto king = game.getBoard().getPieceAt(4, 1);
     ASSERT_NE(king, nullptr);
     EXPECT_EQ(king->getType(), PieceType::King);
-    EXPECT_EQ(board.getPieceAt(4, 1), nullptr);
+    EXPECT_EQ(game.getBoard().getPieceAt(4, 0), nullptr);
 
-    RemoveFile(filename);
+    game.undoMove();
+    EXPECT_TRUE(game.isWhiteTurn());
+    EXPECT_EQ(game.getMoveCount(), 0);
+    EXPECT_EQ(game.getBoard().getPieceAt(4, 0), king);
+    EXPECT_EQ(king->getX(), 4);
+    EXPECT_EQ(king->getY(), 0);
+    EXPECT_EQ(game.getBoard().getPieceAt(4, 1), blockedPawn);
 }
 
 TEST(GameIntegrationTest, InvalidMoveOutOfBoundsKeepsState) {
     Game game;
     game.start();
-    const std::string filename = "test_invalid_move.json";
-
-    auto initialState = SaveAndRead(game, filename);
-
-    game.makeMove(4, 0, -1, 0);
-    auto afterInvalid = SaveAndRead(game, filename);
-    EXPECT_EQ(initialState, afterInvalid);
-
-    game.makeMove(4, 0, 4, 8);
-    auto afterSecondInvalid = SaveAndRead(game, filename);
-    EXPECT_EQ(initialState, afterSecondInvalid);
+    EXPECT_TRUE(game.isWhiteTurn());
+    EXPECT_EQ(game.getMoveCount(), 0);
 
     auto king = game.getBoard().getPieceAt(4, 0);
     ASSERT_NE(king, nullptr);
     EXPECT_EQ(king->getType(), PieceType::King);
 
-    RemoveFile(filename);
+    game.makeMove(4, 0, -1, 0);
+    EXPECT_TRUE(game.isWhiteTurn());
+    EXPECT_EQ(game.getMoveCount(), 0);
+    EXPECT_EQ(game.getBoard().getPieceAt(4, 0), king);
+
+    game.makeMove(4, 0, 4, 8);
+    EXPECT_TRUE(game.isWhiteTurn());
+    EXPECT_EQ(game.getMoveCount(), 0);
+    EXPECT_EQ(game.getBoard().getPieceAt(4, 0), king);
 }
