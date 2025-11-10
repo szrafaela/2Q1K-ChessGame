@@ -16,6 +16,10 @@ public:
     void undoMove();
     bool isCheckmate() const;
     bool isStalemate() const;
+    const Board& getBoard() const;
+    bool isWhiteTurn() const;
+    Color getCurrentPlayer() const;
+    int getMoveCount() const;
 
     // JSON mentés/betöltés
     void saveToFile(const std::string& filename);

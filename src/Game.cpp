@@ -27,7 +27,8 @@ void Game::makeMove(int fromX, int fromY, int toX, int toY) {
 
     // ideiglenes stub, amíg az isValidMove nincs implementálva
     if (board.isValidMove(piece, toX, toY)) {
-        moveHistory.emplace_back(piece.get(), fromX, fromY, toX, toY);
+        auto capturedPiece = board.getPieceAt(toX, toY);
+        moveHistory.emplace_back(piece.get(), fromX, fromY, toX, toY, capturedPiece);
         board.movePiece(fromX, fromY, toX, toY);
         whiteTurn = !whiteTurn;
         currentPlayer = whiteTurn ? Color::White : Color::Black;
@@ -39,6 +40,10 @@ void Game::undoMove() {
     if (moveHistory.empty()) return;
     Move last = moveHistory.back();
     board.movePiece(last.getToX(), last.getToY(), last.getFromX(), last.getFromY());
+    if (auto captured = last.getCapturedPiece()) {
+        board.setPieceAt(last.getToX(), last.getToY(), captured);
+        captured->setPosition(last.getToX(), last.getToY());
+    }
     moveHistory.pop_back();
     whiteTurn = !whiteTurn;
     currentPlayer = whiteTurn ? Color::White : Color::Black;
@@ -51,6 +56,22 @@ bool Game::isCheckmate() const {
 
 bool Game::isStalemate() const {
     return false; // későbbre hagyva
+}
+
+const Board& Game::getBoard() const {
+    return board;
+}
+
+bool Game::isWhiteTurn() const {
+    return whiteTurn;
+}
+
+Color Game::getCurrentPlayer() const {
+    return currentPlayer;
+}
+
+int Game::getMoveCount() const {
+    return moveCount;
 }
 
 void Game::saveToFile(const std::string& filename) {
