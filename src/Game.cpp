@@ -18,22 +18,34 @@ void Game::start() {
 }
 
 void Game::makeMove(int fromX, int fromY, int toX, int toY) {
-    // std::shared_ptr<Piece> használata
     auto piece = board.getPieceAt(fromX, fromY);
     if (!piece) return;
 
     if (piece->getColor() != (whiteTurn ? Color::White : Color::Black))
         return;
 
-    // ideiglenes stub, amíg az isValidMove nincs implementálva
-    if (board.isValidMove(piece, toX, toY)) {
-        auto capturedPiece = board.getPieceAt(toX, toY);
-        moveHistory.emplace_back(piece.get(), fromX, fromY, toX, toY, capturedPiece);
-        board.movePiece(fromX, fromY, toX, toY);
-        whiteTurn = !whiteTurn;
-        currentPlayer = whiteTurn ? Color::White : Color::Black;
-        moveCount++;
+    if (!board.isValidMove(piece, toX, toY))
+        return;
+
+    auto capturedPiece = board.getPieceAt(toX, toY);
+
+    // Tentatively make the move.
+    board.movePiece(fromX, fromY, toX, toY);
+
+    // Reject moves that leave own king in check.
+    if (isInCheck(piece->getColor())) {
+        board.movePiece(toX, toY, fromX, fromY);
+        if (capturedPiece) {
+            board.setPieceAt(toX, toY, capturedPiece);
+            capturedPiece->setPosition(toX, toY);
+        }
+        return;
     }
+
+    moveHistory.emplace_back(piece.get(), fromX, fromY, toX, toY, capturedPiece);
+    whiteTurn = !whiteTurn;
+    currentPlayer = whiteTurn ? Color::White : Color::Black;
+    moveCount++;
 }
 
 void Game::undoMove() {
@@ -51,11 +63,11 @@ void Game::undoMove() {
 }
 
 bool Game::isCheckmate() const {
-    return false; // későbbre hagyva
+    return false; // k�cs�'bbre hagyva
 }
 
 bool Game::isStalemate() const {
-    return false; // későbbre hagyva
+    return false; // k�cs�'bbre hagyva
 }
 
 const Board& Game::getBoard() const {
@@ -74,6 +86,37 @@ int Game::getMoveCount() const {
     return moveCount;
 }
 
+bool Game::isInCheck(Color color) const {
+    int kingX = -1, kingY = -1;
+
+    // Locate the king of the given color.
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            auto piece = board.getPieceAt(x, y);
+            if (piece && piece->getType() == PieceType::King && piece->getColor() == color) {
+                kingX = x;
+                kingY = y;
+                break;
+            }
+        }
+    }
+
+    if (kingX == -1 || kingY == -1) return false;
+
+    // See if any opposing piece can attack the king's square.
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            auto piece = board.getPieceAt(x, y);
+            if (piece && piece->getColor() != color) {
+                if (board.isValidMove(piece, kingX, kingY)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 void Game::saveToFile(const std::string& filename) {
     json j;
 
@@ -86,7 +129,7 @@ void Game::saveToFile(const std::string& filename) {
         for (int x = 0; x < 8; ++x) {
             auto piece = board.getPieceAt(x, y);
             if (piece)
-                row.push_back(std::string(1, piece->getSymbol()));  // ✅ char → string
+                row.push_back(std::string(1, piece->getSymbol()));  // �� char ��' string
             else
                 row.push_back(".");
         }
@@ -96,7 +139,7 @@ void Game::saveToFile(const std::string& filename) {
 
     std::ofstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "Nem sikerült megnyitni a fájlt írásra: " << filename << "\n";
+        std::cerr << "Nem sikerƕlt megnyitni a f��jlt ��r��sra: " << filename << "\n";
         return;
     }
     file << std::setw(4) << j;
@@ -105,7 +148,7 @@ void Game::saveToFile(const std::string& filename) {
 void Game::loadFromFile(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "Nem sikerült megnyitni a fájlt: " << filename << "\n";
+        std::cerr << "Nem sikerƕlt megnyitni a f��jlt: " << filename << "\n";
         return;
     }
 
@@ -122,7 +165,7 @@ void Game::loadFromFile(const std::string& filename) {
         for (int x = 0; x < 8; ++x) {
             std::string symbol = boardData[y][x];
             if (symbol != ".") {
-                board.setPieceAt(x, y, Piece::createFromSymbol(symbol[0], x, y)); // ✅ char, x, y
+                board.setPieceAt(x, y, Piece::createFromSymbol(symbol[0], x, y)); // �� char, x, y
             } else {
                 board.setPieceAt(x, y, nullptr);
             }

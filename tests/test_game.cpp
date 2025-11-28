@@ -125,8 +125,8 @@ TEST(GameIntegrationTest, SaveAndLoadGameStateTest) {
     game.start();
     const std::string saveFile = "test_save_load_state.json";
 
-    // White moves king forward one square.
-    game.makeMove(4, 0, 4, 1);
+    // White moves a pawn forward one square.
+    game.makeMove(4, 1, 4, 2);
     EXPECT_FALSE(game.isWhiteTurn());
     EXPECT_EQ(game.getMoveCount(), 1);
 
@@ -163,24 +163,25 @@ TEST(GameIntegrationTest, SaveAndLoadGameStateTest) {
 TEST(GameIntegrationTest, UndoMoveTest) {
     Game game;
     game.start();
-    auto blockedPawn = game.getBoard().getPieceAt(4, 1);
-    ASSERT_NE(blockedPawn, nullptr);
+    auto movedPawn = game.getBoard().getPieceAt(4, 1);
+    ASSERT_NE(movedPawn, nullptr);
 
-    game.makeMove(4, 0, 4, 1);
+    // Legal double-step pawn move.
+    game.makeMove(4, 1, 4, 3);
     EXPECT_FALSE(game.isWhiteTurn());
     EXPECT_EQ(game.getMoveCount(), 1);
-    auto king = game.getBoard().getPieceAt(4, 1);
-    ASSERT_NE(king, nullptr);
-    EXPECT_EQ(king->getType(), PieceType::King);
-    EXPECT_EQ(game.getBoard().getPieceAt(4, 0), nullptr);
+    auto pawn = game.getBoard().getPieceAt(4, 3);
+    ASSERT_NE(pawn, nullptr);
+    EXPECT_EQ(pawn->getType(), PieceType::Pawn);
+    EXPECT_EQ(game.getBoard().getPieceAt(4, 1), nullptr);
 
     game.undoMove();
     EXPECT_TRUE(game.isWhiteTurn());
     EXPECT_EQ(game.getMoveCount(), 0);
-    EXPECT_EQ(game.getBoard().getPieceAt(4, 0), king);
-    EXPECT_EQ(king->getX(), 4);
-    EXPECT_EQ(king->getY(), 0);
-    EXPECT_EQ(game.getBoard().getPieceAt(4, 1), blockedPawn);
+    EXPECT_EQ(game.getBoard().getPieceAt(4, 1), pawn);
+    EXPECT_EQ(pawn->getX(), 4);
+    EXPECT_EQ(pawn->getY(), 1);
+    EXPECT_EQ(game.getBoard().getPieceAt(4, 3), nullptr);
 }
 
 TEST(GameIntegrationTest, InvalidMoveOutOfBoundsKeepsState) {

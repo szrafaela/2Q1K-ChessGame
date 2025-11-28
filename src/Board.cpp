@@ -47,6 +47,8 @@ bool Board::isValidMove(std::shared_ptr<Piece> piece, int toX, int toY) const {
     if (!isInsideBoard(toX, toY)) return false;
     if (!isInsideBoard(piece->getX(), piece->getY())) return false;
     if (piece->getX() == toX && piece->getY() == toY) return false;
+    auto destPiece = getPieceAt(toX, toY);
+    if (destPiece && destPiece->getColor() == piece->getColor()) return false;
 
     return piece->isValidMove(*this, toX, toY);
 }
