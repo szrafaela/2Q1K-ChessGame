@@ -3,6 +3,8 @@
 #include <memory>
 #include <cctype>
 
+class Board;
+
 enum class PieceType { King, Queen, Rook, Bishop, Knight, Pawn };
 enum class Color { White, Black };
 
@@ -11,6 +13,8 @@ public:
     Piece(PieceType type, Color color, int x, int y)
         : type(type), color(color), x(x), y(y) {}
 
+    virtual ~Piece() = default;
+
     PieceType getType() const { return type; }
     Color getColor() const { return color; }
     int getX() const { return x; }
@@ -18,7 +22,7 @@ public:
 
     void setPosition(int newX, int newY) { x = newX; y = newY; }
 
-    // 🔹 JSON-hoz szükséges segédfüggvények:
+    // Symbol helpers for serialization / display.
     char getSymbol() const {
         char symbol = '?';
         switch (type) {
@@ -32,28 +36,53 @@ public:
         return (color == Color::White) ? std::toupper(symbol) : std::tolower(symbol);
     }
 
-    static std::shared_ptr<Piece> createFromSymbol(char symbol, int x, int y) {
-        if (symbol == '.') return nullptr;
+    static std::shared_ptr<Piece> createFromSymbol(char symbol, int x, int y);
+    static std::shared_ptr<Piece> create(PieceType type, Color color, int x, int y);
 
-        Color color = std::isupper(symbol) ? Color::White : Color::Black;
-        char typeChar = std::toupper(symbol);
-        PieceType type;
+    // Piece-specific movement validation (ignores turn handling).
+    virtual bool isValidMove(const Board& board, int toX, int toY) const;
 
-        switch (typeChar) {
-            case 'P': type = PieceType::Pawn; break;
-            case 'R': type = PieceType::Rook; break;
-            case 'N': type = PieceType::Knight; break;
-            case 'B': type = PieceType::Bishop; break;
-            case 'Q': type = PieceType::Queen; break;
-            case 'K': type = PieceType::King; break;
-            default: type = PieceType::Pawn; break;
-        }
-
-        return std::make_shared<Piece>(type, color, x, y);
-    }
-
-private:
+protected:
     PieceType type;
     Color color;
     int x, y;
+};
+
+class KingPiece : public Piece {
+public:
+    KingPiece(Color color, int x, int y) : Piece(PieceType::King, color, x, y) {}
+    bool isValidMove(const Board& board, int toX, int toY) const override;
+};
+
+class QueenPiece : public Piece {
+public:
+    QueenPiece(Color color, int x, int y) : Piece(PieceType::Queen, color, x, y) {}
+    bool isValidMove(const Board& board, int toX, int toY) const override;
+};
+
+class RookPiece : public Piece {
+public:
+    RookPiece(Color color, int x, int y) : Piece(PieceType::Rook, color, x, y) {}
+    bool isValidMove(const Board& board, int toX, int toY) const override;
+};
+
+class BishopPiece : public Piece {
+public:
+    BishopPiece(Color color, int x, int y) : Piece(PieceType::Bishop, color, x, y) {}
+    bool isValidMove(const Board& board, int toX, int toY) const override;
+};
+
+class KnightPiece : public Piece {
+public:
+    KnightPiece(Color color, int x, int y) : Piece(PieceType::Knight, color, x, y) {}
+    bool isValidMove(const Board& board, int toX, int toY) const override;
+};
+
+class PawnPiece : public Piece {
+public:
+    PawnPiece(Color color, int x, int y) : Piece(PieceType::Pawn, color, x, y) {}
+    bool isValidMove(const Board& board, int toX, int toY) const override;
+
+private:
+    bool isStartingRank() const;
 };
