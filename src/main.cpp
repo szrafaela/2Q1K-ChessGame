@@ -1,16 +1,17 @@
 #include "Game.h"
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <optional>
+#include <algorithm>
 #include <cctype>
+#include <fstream>
+#include <iostream>
+#include <optional>
+#include <sstream>
 
 namespace {
 const std::string kSaveFile = "savegame.json";
 
 std::optional<std::pair<int, int>> parseSquare(const std::string& coord) {
     if (coord.size() != 2) return std::nullopt;
-    char file = std::tolower(coord[0]);
+    char file = static_cast<char>(std::tolower(static_cast<unsigned char>(coord[0])));
     char rank = coord[1];
     if (file < 'a' || file > 'h') return std::nullopt;
     if (rank < '1' || rank > '8') return std::nullopt;
@@ -47,6 +48,21 @@ void printHelp() {
               << "  load              - állás betöltése (savegame.json)\n"
               << "  help              - parancsok listája\n"
               << "  quit              - kilépés a játékból\n";
+}
+
+PieceType promptPromotionChoice() {
+    std::cout << "Válassz promóciós figurát (q = vezér, r = bástya, b = futó, n = huszár). Alapértelmezett: vezér: ";
+    std::string input;
+    std::getline(std::cin, input);
+    if (input.empty()) return PieceType::Queen;
+    char c = static_cast<char>(std::tolower(static_cast<unsigned char>(input.front())));
+    switch (c) {
+        case 'q': return PieceType::Queen;
+        case 'r': return PieceType::Rook;
+        case 'b': return PieceType::Bishop;
+        case 'n': return PieceType::Knight;
+        default: return PieceType::Queen;
+    }
 }
 } // namespace
 
@@ -92,8 +108,18 @@ int main() {
                 std::cout << "Érvénytelen mező. Engedélyezett formátum: a1-h8.";
                 continue;
             }
+
+            PieceType promotionChoice = PieceType::Queen;
+            auto piece = game.getBoard().getPieceAt(fromCoord->first, fromCoord->second);
+            if (piece && piece->getType() == PieceType::Pawn) {
+                int promoRank = (piece->getColor() == Color::White) ? 7 : 0;
+                if (toCoord->second == promoRank) {
+                    promotionChoice = promptPromotionChoice();
+                }
+            }
+
             int beforeMoves = game.getMoveCount();
-            game.makeMove(fromCoord->first, fromCoord->second, toCoord->first, toCoord->second);
+            game.makeMove(fromCoord->first, fromCoord->second, toCoord->first, toCoord->second, promotionChoice);
             if (game.getMoveCount() == beforeMoves) {
                 std::cout << "A lépés érvénytelen.";
             } else {

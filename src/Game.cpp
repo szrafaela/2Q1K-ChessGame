@@ -18,7 +18,7 @@ void Game::start() {
     board.initialize();
 }
 
-void Game::makeMove(int fromX, int fromY, int toX, int toY) {
+void Game::makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionChoice) {
     auto piece = board.getPieceAt(fromX, fromY);
     if (!piece) return;
 
@@ -118,11 +118,22 @@ void Game::makeMove(int fromX, int fromY, int toX, int toY) {
     // Tentatively make the move.
     board.movePiece(fromX, fromY, toX, toY);
 
-    // Handle promotion (auto-queen).
+    // Handle promotion (choose piece).
     bool promoted = false;
     if (piece->getType() == PieceType::Pawn &&
         ((moverColor == Color::White && toY == 7) || (moverColor == Color::Black && toY == 0))) {
-        auto promotedPiece = Piece::create(PieceType::Queen, moverColor, toX, toY);
+        PieceType chosen = promotionChoice;
+        switch (chosen) {
+            case PieceType::Queen:
+            case PieceType::Rook:
+            case PieceType::Bishop:
+            case PieceType::Knight:
+                break;
+            default:
+                chosen = PieceType::Queen;
+                break;
+        }
+        auto promotedPiece = Piece::create(chosen, moverColor, toX, toY);
         promotedPiece->markMoved();
         mv.promotion = true;
         mv.promotedFrom = board.getPieceAt(toX, toY);

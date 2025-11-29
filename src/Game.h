@@ -14,7 +14,7 @@ public:
     Game();
 
     void start();
-    void makeMove(int fromX, int fromY, int toX, int toY);
+    void makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionChoice = PieceType::Queen);
     void undoMove();
     bool isCheckmate();
     bool isStalemate();
