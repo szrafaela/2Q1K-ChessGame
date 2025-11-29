@@ -1,30 +1,165 @@
 #include "Game.h"
-#include <iostream>
+#include <algorithm>
+#include <cctype>
 #include <fstream>
+#include <iostream>
+#include <optional>
+#include <sstream>
+
+namespace {
+const std::string kSaveFile = "savegame.json";
+
+std::optional<std::pair<int, int>> parseSquare(const std::string& coord) {
+    if (coord.size() != 2) return std::nullopt;
+    char file = static_cast<char>(std::tolower(static_cast<unsigned char>(coord[0])));
+    char rank = coord[1];
+    if (file < 'a' || file > 'h') return std::nullopt;
+    if (rank < '1' || rank > '8') return std::nullopt;
+    int x = file - 'a';
+    int y = rank - '1';
+    return std::make_pair(x, y);
+}
+
+void printBoard(const Game& game) {
+    const Board& board = game.getBoard();
+    std::cout << "\n   a b c d e f g h\n";
+    for (int y = 7; y >= 0; --y) {
+        std::cout << (y + 1) << "  ";
+        for (int x = 0; x < 8; ++x) {
+            auto piece = board.getPieceAt(x, y);
+            if (piece) {
+                std::cout << piece->getSymbol();
+            } else {
+                std::cout << '.';
+            }
+            std::cout << ' ';
+        }
+        std::cout << " " << (y + 1) << '\n';
+    }
+    std::cout << "   a b c d e f g h\n";
+}
+
+void printHelp() {
+    std::cout << "\nElérhető parancsok:\n"
+              << "  move <from> <to>  - például: move e2 e4\n"
+              << "  undo              - utolsó lépés visszavonása\n"
+              << "  show              - tábla kirajzolása\n"
+              << "  save              - állás mentése (savegame.json)\n"
+              << "  load              - állás betöltése (savegame.json)\n"
+              << "  help              - parancsok listája\n"
+              << "  quit              - kilépés a játékból\n";
+}
+
+PieceType promptPromotionChoice() {
+    std::cout << "Válassz promóciós figurát (q = vezér, r = bástya, b = futó, n = huszár). Alapértelmezett: vezér: ";
+    std::string input;
+    std::getline(std::cin, input);
+    if (input.empty()) return PieceType::Queen;
+    char c = static_cast<char>(std::tolower(static_cast<unsigned char>(input.front())));
+    switch (c) {
+        case 'q': return PieceType::Queen;
+        case 'r': return PieceType::Rook;
+        case 'b': return PieceType::Bishop;
+        case 'n': return PieceType::Knight;
+        default: return PieceType::Queen;
+    }
+}
+} // namespace
 
 int main() {
     Game game;
 
-    // 🔹 1. Betöltés JSON-ból (ha létezik)
-    std::ifstream infile("savegame.json");
+    std::ifstream infile(kSaveFile);
     if (infile.good()) {
         std::cout << "Korábbi mentés betöltése..." << std::endl;
-        game.loadFromFile("savegame.json");
+        game.loadFromFile(kSaveFile);
     } else {
         std::cout << "Új játék indítása..." << std::endl;
         game.start();
     }
 
     std::cout << "Sakkjáték elindult!" << std::endl;
+    printBoard(game);
+    printHelp();
 
-    // 🔹 2. Szimulált lépések vagy interakció (ide jönne a UI vagy input kezelés)
-    // Példa: automatikus mentés demonstrációja
-    std::cout << "A játék fut. Kilépéshez nyomj Entert..." << std::endl;
-    std::cin.get();
+    std::string line;
+    while (true) {
+        std::cout << '\n' << (game.isWhiteTurn() ? "Fehér" : "Fekete") << " következik > ";
+        if (!std::getline(std::cin, line)) {
+            break;
+        }
+        std::stringstream ss(line);
+        std::string command;
+        ss >> command;
+        if (command.empty()) {
+            continue;
+        }
 
-    // 🔹 3. Automatikus mentés kilépéskor
-    std::cout << "Játék mentése JSON fájlba..." << std::endl;
-    game.saveToFile("savegame.json");
+        if (command == "move") {
+            std::string from, to;
+            ss >> from >> to;
+            if (from.empty() || to.empty()) {
+                std::cout << "Használat: move <from> <to> (pl. move e2 e4)";
+                continue;
+            }
+            auto fromCoord = parseSquare(from);
+            auto toCoord = parseSquare(to);
+            if (!fromCoord || !toCoord) {
+                std::cout << "Érvénytelen mező. Engedélyezett formátum: a1-h8.";
+                continue;
+            }
+
+            PieceType promotionChoice = PieceType::Queen;
+            auto piece = game.getBoard().getPieceAt(fromCoord->first, fromCoord->second);
+            if (piece && piece->getType() == PieceType::Pawn) {
+                int promoRank = (piece->getColor() == Color::White) ? 7 : 0;
+                if (toCoord->second == promoRank) {
+                    promotionChoice = promptPromotionChoice();
+                }
+            }
+
+            int beforeMoves = game.getMoveCount();
+            game.makeMove(fromCoord->first, fromCoord->second, toCoord->first, toCoord->second, promotionChoice);
+            if (game.getMoveCount() == beforeMoves) {
+                std::cout << "A lépés érvénytelen.";
+            } else {
+                std::cout << "Lépés rögzítve.";
+                printBoard(game);
+            }
+        } else if (command == "undo") {
+            if (game.getMoveCount() == 0) {
+                std::cout << "Nincs visszavonható lépés.";
+                continue;
+            }
+            game.undoMove();
+            std::cout << "Utolsó lépés visszavonva.";
+            printBoard(game);
+        } else if (command == "show") {
+            printBoard(game);
+        } else if (command == "save") {
+            game.saveToFile(kSaveFile);
+            std::cout << "Állás elmentve: " << kSaveFile;
+        } else if (command == "load") {
+            std::ifstream check(kSaveFile);
+            if (!check.good()) {
+                std::cout << "Nincs mentett állás a " << kSaveFile << " fájlban.";
+                continue;
+            }
+            game.loadFromFile(kSaveFile);
+            std::cout << "Állás betöltve.";
+            printBoard(game);
+        } else if (command == "help") {
+            printHelp();
+        } else if (command == "quit" || command == "exit") {
+            std::cout << "Kilépés...";
+            break;
+        } else {
+            std::cout << "Ismeretlen parancs. Írd be, hogy 'help' a lista megjelenítéséhez.";
+        }
+    }
+
+    std::cout << "\nJáték mentése JSON fájlba..." << std::endl;
+    game.saveToFile(kSaveFile);
 
     std::cout << "Mentés kész. Viszlát!" << std::endl;
     return 0;

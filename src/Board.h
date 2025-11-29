@@ -16,4 +16,5 @@ public:
 
 private:
     std::vector<std::vector<std::shared_ptr<Piece>>> board;
+    bool isInsideBoard(int x, int y) const;
 };

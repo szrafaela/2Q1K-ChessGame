@@ -6,6 +6,10 @@ add_library(chess
     Move.cpp)
 
 target_include_directories(chess PUBLIC
-   ${CMAKE_CURRENT_SOURCE_DIR}
-   ${CMAKE_SOURCE_DIR}/external/nlohmann_json/single_include
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(chess
+    PUBLIC
+        nlohmann_json::nlohmann_json
 )

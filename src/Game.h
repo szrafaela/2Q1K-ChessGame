@@ -5,23 +5,26 @@
 #include "Player.h"
 #include "Move.h"
 #include "Piece.h"
+#include <optional>
+#include <utility>
 
-// A játék logikáját kezelő osztály
+// A j��t�ck logik��j��t kezel�' oszt��ly
 class Game {
 public:
     Game();
 
     void start();
-    void makeMove(int fromX, int fromY, int toX, int toY);
+    void makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionChoice = PieceType::Queen);
     void undoMove();
-    bool isCheckmate() const;
-    bool isStalemate() const;
+    bool isCheckmate();
+    bool isStalemate();
     const Board& getBoard() const;
     bool isWhiteTurn() const;
     Color getCurrentPlayer() const;
     int getMoveCount() const;
+    bool isInCheck(Color color) const;
 
-    // JSON mentés/betöltés
+    // JSON ment�cs/bet�lt�cs
     void saveToFile(const std::string& filename);
     void loadFromFile(const std::string& filename);
 
@@ -31,7 +34,12 @@ private:
     Player black;
     std::vector<Move> moveHistory;
 
-    bool whiteTurn;           // fehér van-e soron
-    Color currentPlayer;      // aktuális játékos színe
-    int moveCount;            // hány lépés történt eddig
+    bool whiteTurn;           // feh�cr van-e soron
+    Color currentPlayer;      // aktu��lis j��t�ckos sz��ne
+    int moveCount;            // h��ny l�cp�cs t�rt�cnt eddig
+    std::optional<std::pair<int, int>> enPassantTarget;
+
+    bool hasLegalMove(Color color);
+    bool canCastle(Color color, bool kingSide) const;
+    bool isSquareAttacked(int x, int y, Color byColor) const;
 };
