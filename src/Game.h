@@ -5,6 +5,8 @@
 #include "Player.h"
 #include "Move.h"
 #include "Piece.h"
+#include <optional>
+#include <utility>
 
 // A j��t�ck logik��j��t kezel�' oszt��ly
 class Game {
@@ -35,6 +37,9 @@ private:
     bool whiteTurn;           // feh�cr van-e soron
     Color currentPlayer;      // aktu��lis j��t�ckos sz��ne
     int moveCount;            // h��ny l�cp�cs t�rt�cnt eddig
+    std::optional<std::pair<int, int>> enPassantTarget;
 
     bool hasLegalMove(Color color);
+    bool canCastle(Color color, bool kingSide) const;
+    bool isSquareAttacked(int x, int y, Color byColor) const;
 };

@@ -11,7 +11,7 @@ enum class Color { White, Black };
 class Piece {
 public:
     Piece(PieceType type, Color color, int x, int y)
-        : type(type), color(color), x(x), y(y) {}
+        : type(type), color(color), x(x), y(y), moved(false) {}
 
     virtual ~Piece() = default;
 
@@ -21,6 +21,9 @@ public:
     int getY() const { return y; }
 
     void setPosition(int newX, int newY) { x = newX; y = newY; }
+    bool hasMoved() const { return moved; }
+    void markMoved() { moved = true; }
+    void setMoved(bool value) { moved = value; }
 
     // Symbol helpers for serialization / display.
     char getSymbol() const {
@@ -46,6 +49,7 @@ protected:
     PieceType type;
     Color color;
     int x, y;
+    bool moved;
 };
 
 class KingPiece : public Piece {
