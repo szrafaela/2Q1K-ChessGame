@@ -62,12 +62,41 @@ void Game::undoMove() {
     if (moveCount > 0) moveCount--;
 }
 
-bool Game::isCheckmate() const {
-    return false; // k�cs�'bbre hagyva
+bool Game::hasLegalMove(Color color) {
+    for (int y = 0; y < 8; ++y) {
+        for (int x = 0; x < 8; ++x) {
+            auto piece = board.getPieceAt(x, y);
+            if (!piece || piece->getColor() != color) continue;
+
+            for (int toY = 0; toY < 8; ++toY) {
+                for (int toX = 0; toX < 8; ++toX) {
+                    if (!board.isValidMove(piece, toX, toY)) continue;
+                    auto captured = board.getPieceAt(toX, toY);
+                    board.movePiece(x, y, toX, toY);
+                    bool leavesInCheck = isInCheck(color);
+                    board.movePiece(toX, toY, x, y);
+                    if (captured) {
+                        board.setPieceAt(toX, toY, captured);
+                        captured->setPosition(toX, toY);
+                    }
+                    if (!leavesInCheck) return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
-bool Game::isStalemate() const {
-    return false; // k�cs�'bbre hagyva
+bool Game::isCheckmate() {
+    Color toMove = currentPlayer;
+    if (!isInCheck(toMove)) return false;
+    return !hasLegalMove(toMove);
+}
+
+bool Game::isStalemate() {
+    Color toMove = currentPlayer;
+    if (isInCheck(toMove)) return false;
+    return !hasLegalMove(toMove);
 }
 
 const Board& Game::getBoard() const {

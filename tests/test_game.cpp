@@ -39,12 +39,12 @@ TEST(BoardTest, CanMovePiece) {
     Board board;
     board.initialize();
 
-    // getPieceAt() már std::shared_ptr<Piece>-et ad vissza
-    auto king = board.getPieceAt(4, 0);
-    ASSERT_NE(king, nullptr);
+    // getPieceAt() m��r std::shared_ptr<Piece>-et ad vissza
+    auto pawn = board.getPieceAt(0, 1);
+    ASSERT_NE(pawn, nullptr);
 
-    board.movePiece(4, 0, 4, 1);
-    EXPECT_EQ(king->getY(), 1);
+    board.movePiece(0, 1, 0, 2);
+    EXPECT_EQ(pawn->getY(), 2);
 }
 
 TEST(PieceTest, PositionUpdates) {
@@ -59,15 +59,21 @@ TEST(GameIntegrationTest, GameInitializationTest) {
     game.start();
     const Board& board = game.getBoard();
 
-    auto whiteKing = board.getPieceAt(4, 0);
-    ASSERT_NE(whiteKing, nullptr);
-    EXPECT_EQ(whiteKing->getType(), PieceType::King);
-    EXPECT_EQ(whiteKing->getColor(), Color::White);
+    const PieceType backRank[8] = {
+        PieceType::Rook, PieceType::Knight, PieceType::Bishop, PieceType::Queen,
+        PieceType::King, PieceType::Bishop, PieceType::Knight, PieceType::Rook};
 
-    auto blackKing = board.getPieceAt(4, 7);
-    ASSERT_NE(blackKing, nullptr);
-    EXPECT_EQ(blackKing->getType(), PieceType::King);
-    EXPECT_EQ(blackKing->getColor(), Color::Black);
+    for (int x = 0; x < 8; ++x) {
+        auto whitePiece = board.getPieceAt(x, 0);
+        ASSERT_NE(whitePiece, nullptr) << "Missing white back-rank piece at column " << x;
+        EXPECT_EQ(whitePiece->getType(), backRank[x]);
+        EXPECT_EQ(whitePiece->getColor(), Color::White);
+
+        auto blackPiece = board.getPieceAt(x, 7);
+        ASSERT_NE(blackPiece, nullptr) << "Missing black back-rank piece at column " << x;
+        EXPECT_EQ(blackPiece->getType(), backRank[x]);
+        EXPECT_EQ(blackPiece->getColor(), Color::Black);
+    }
 
     for (int x = 0; x < 8; ++x) {
         auto whitePawn = board.getPieceAt(x, 1);
@@ -79,13 +85,6 @@ TEST(GameIntegrationTest, GameInitializationTest) {
         ASSERT_NE(blackPawn, nullptr) << "Missing black pawn at column " << x;
         EXPECT_EQ(blackPawn->getType(), PieceType::Pawn);
         EXPECT_EQ(blackPawn->getColor(), Color::Black);
-    }
-
-    for (int x = 0; x < 8; ++x) {
-        if (x != 4) {
-            EXPECT_EQ(board.getPieceAt(x, 0), nullptr);
-            EXPECT_EQ(board.getPieceAt(x, 7), nullptr);
-        }
     }
 
     for (int y = 2; y <= 5; ++y) {

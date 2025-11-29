@@ -13,9 +13,24 @@ void Board::initialize() {
         }
     }
 
-    // Minimal starting setup: kings and pawns only.
+    // Full starting setup.
+    board[0][0] = Piece::create(PieceType::Rook, Color::White, 0, 0);
+    board[0][1] = Piece::create(PieceType::Knight, Color::White, 1, 0);
+    board[0][2] = Piece::create(PieceType::Bishop, Color::White, 2, 0);
+    board[0][3] = Piece::create(PieceType::Queen, Color::White, 3, 0);
     board[0][4] = Piece::create(PieceType::King, Color::White, 4, 0);
+    board[0][5] = Piece::create(PieceType::Bishop, Color::White, 5, 0);
+    board[0][6] = Piece::create(PieceType::Knight, Color::White, 6, 0);
+    board[0][7] = Piece::create(PieceType::Rook, Color::White, 7, 0);
+
+    board[7][0] = Piece::create(PieceType::Rook, Color::Black, 0, 7);
+    board[7][1] = Piece::create(PieceType::Knight, Color::Black, 1, 7);
+    board[7][2] = Piece::create(PieceType::Bishop, Color::Black, 2, 7);
+    board[7][3] = Piece::create(PieceType::Queen, Color::Black, 3, 7);
     board[7][4] = Piece::create(PieceType::King, Color::Black, 4, 7);
+    board[7][5] = Piece::create(PieceType::Bishop, Color::Black, 5, 7);
+    board[7][6] = Piece::create(PieceType::Knight, Color::Black, 6, 7);
+    board[7][7] = Piece::create(PieceType::Rook, Color::Black, 7, 7);
 
     for (int x = 0; x < 8; ++x) {
         board[1][x] = Piece::create(PieceType::Pawn, Color::White, x, 1);
