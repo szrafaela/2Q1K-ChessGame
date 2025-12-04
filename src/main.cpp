@@ -268,6 +268,19 @@ int main() {
     std::vector<std::string> uciMoves;
 #endif
 
+    auto restartGame = [&](const std::string& message) {
+        std::cout << message
+                  << "\nGame over. Starting a new game. Type 'quit' to exit if you are done.\n";
+        game.start();
+#ifdef _WIN32
+        uciMoves.clear();
+        if (engine.isRunning()) {
+            engine.send("ucinewgame\n");
+        }
+#endif
+        printBoard(game);
+    };
+
     std::ifstream infile(kSaveFile);
     if (infile.good()) {
         std::cout << "Loading previous save..." << std::endl;
@@ -334,12 +347,12 @@ int main() {
                 if (game.isCheckmate()) {
                     Color winner = game.isWhiteTurn() ? Color::Black : Color::White;
                     std::cout << "\nCheckmate! " << game.getPlayerName(winner) << " wins.\n";
-                    printBoard(game);
-                    break;
+                    restartGame("Checkmate reached.");
+                    continue;
                 } else if (game.isStalemate()) {
                     std::cout << "\nStalemate. Draw.\n";
-                    printBoard(game);
-                    break;
+                    restartGame("Stalemate reached.");
+                    continue;
                 } else {
                     Color toMove = game.getCurrentPlayer();
                     if (game.isInCheck(toMove)) {
@@ -362,12 +375,12 @@ int main() {
                                 if (game.isCheckmate()) {
                                     Color winner = game.isWhiteTurn() ? Color::Black : Color::White;
                                     std::cout << "Checkmate! " << game.getPlayerName(winner) << " wins.\n";
-                                    printBoard(game);
-                                    break;
+                                    restartGame("Checkmate reached.");
+                                    continue;
                                 } else if (game.isStalemate()) {
                                     std::cout << "Stalemate. Draw.\n";
-                                    printBoard(game);
-                                    break;
+                                    restartGame("Stalemate reached.");
+                                    continue;
                                 } else {
                                     Color tm = game.getCurrentPlayer();
                                     if (game.isInCheck(tm)) {
