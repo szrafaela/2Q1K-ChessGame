@@ -2,7 +2,7 @@
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <fstream>
-#include <iomanip>  // std::setw-hez
+#include <iomanip>
 #include <cmath>
 
 using json = nlohmann::json;
@@ -16,6 +16,11 @@ Game::Game()
 
 void Game::start() {
     board.initialize();
+    whiteTurn = true;
+    currentPlayer = Color::White;
+    moveHistory.clear();
+    moveCount = 0;
+    enPassantTarget.reset();
 }
 
 void Game::makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionChoice) {
@@ -55,7 +60,6 @@ void Game::makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionC
 
         bool leavesInCheck = isInCheck(moverColor);
         if (leavesInCheck) {
-            // revert
             board.movePiece(toX, toY, fromX, fromY);
             board.movePiece(rookToX, rookToY, rookFromX, rookFromY);
             return;
@@ -77,7 +81,7 @@ void Game::makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionC
         return;
     }
 
-    // En passant handling: detect special capture.
+    // En passant handling.
     bool isEnPassantCapture = false;
     std::shared_ptr<Piece> capturedPiece = board.getPieceAt(toX, toY);
     int captureX = toX, captureY = toY;
@@ -89,7 +93,7 @@ void Game::makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionC
         enPassantTarget->first == toX && enPassantTarget->second == toY) {
         isEnPassantCapture = true;
         captureX = toX;
-        captureY = fromY; // pawn being captured is on the fromY rank
+        captureY = fromY;
         capturedPiece = board.getPieceAt(captureX, captureY);
         if (!capturedPiece || capturedPiece->getType() != PieceType::Pawn || capturedPiece->getColor() == moverColor) {
             return;
@@ -107,7 +111,6 @@ void Game::makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionC
     }
     mv.pieceMovedBefore = piece->hasMoved();
 
-    // Apply capture for en passant.
     if (isEnPassantCapture) {
         board.setPieceAt(captureX, captureY, nullptr);
         mv.enPassant = true;
@@ -115,10 +118,8 @@ void Game::makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionC
         mv.enPassantCapturedY = captureY;
     }
 
-    // Tentatively make the move.
     board.movePiece(fromX, fromY, toX, toY);
 
-    // Handle promotion (choose piece).
     bool promoted = false;
     if (piece->getType() == PieceType::Pawn &&
         ((moverColor == Color::White && toY == 7) || (moverColor == Color::Black && toY == 0))) {
@@ -141,9 +142,7 @@ void Game::makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionC
         promoted = true;
     }
 
-    // Reject moves that leave own king in check.
     if (isInCheck(moverColor)) {
-        // revert promotion
         if (promoted) {
             board.setPieceAt(toX, toY, mv.promotedFrom);
         }
@@ -151,9 +150,6 @@ void Game::makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionC
         if (capturedPiece) {
             board.setPieceAt(captureX, captureY, capturedPiece);
             capturedPiece->setPosition(captureX, captureY);
-        }
-        if (mv.enPassant) {
-            // already restored by capturedPiece block
         }
         if (mv.hadEnPassantTargetBefore) {
             enPassantTarget = std::make_optional(std::make_pair(mv.prevEnPassantX, mv.prevEnPassantY));
@@ -166,7 +162,6 @@ void Game::makeMove(int fromX, int fromY, int toX, int toY, PieceType promotionC
     piece->markMoved();
 
     enPassantTarget.reset();
-    // set en passant target if pawn double-step
     if (piece->getType() == PieceType::Pawn && std::abs(dy) == 2) {
         int passedY = (fromY + toY) / 2;
         enPassantTarget = std::make_pair(toX, passedY);
@@ -184,7 +179,6 @@ void Game::undoMove() {
     whiteTurn = !whiteTurn;
     currentPlayer = whiteTurn ? Color::White : Color::Black;
 
-    // Restore en passant target prior to the move.
     if (last.hadEnPassantTargetBefore) {
         enPassantTarget = std::make_pair(last.prevEnPassantX, last.prevEnPassantY);
     } else {
@@ -197,15 +191,13 @@ void Game::undoMove() {
         auto king = board.getPieceAt(last.getFromX(), last.getFromY());
         auto rook = board.getPieceAt(last.rookFromX, last.rookFromY);
         if (king) king->setMoved(last.pieceMovedBefore);
-        if (rook) rook->setMoved(false); // once castled they had moved; undo -> not moved
+        if (rook) rook->setMoved(false);
     } else {
-        // undo promotion by restoring the original pawn
         if (last.promotion && last.promotedFrom) {
             board.setPieceAt(last.getToX(), last.getToY(), last.promotedFrom);
         }
         board.movePiece(last.getToX(), last.getToY(), last.getFromX(), last.getFromY());
 
-        // Restore captured piece (including en passant).
         if (auto captured = last.getCapturedPiece()) {
             int capX = last.enPassant ? last.enPassantCapturedX : last.getToX();
             int capY = last.enPassant ? last.enPassantCapturedY : last.getToY();
@@ -228,7 +220,6 @@ bool Game::hasLegalMove(Color color) {
             auto piece = board.getPieceAt(x, y);
             if (!piece || piece->getColor() != color) continue;
 
-            // Castling possibilities.
             if (piece->getType() == PieceType::King) {
                 if (canCastle(color, true) || canCastle(color, false)) {
                     return true;
@@ -237,7 +228,6 @@ bool Game::hasLegalMove(Color color) {
 
             for (int toY = 0; toY < 8; ++toY) {
                 for (int toX = 0; toX < 8; ++toX) {
-                    // En passant simulation.
                     if (piece->getType() == PieceType::Pawn &&
                         std::abs(toX - x) == 1 &&
                         (toY - y) == direction &&
@@ -310,7 +300,6 @@ bool Game::isSquareAttacked(int x, int y, Color byColor) const {
             auto piece = board.getPieceAt(col, row);
             if (!piece || piece->getColor() != byColor) continue;
 
-            // Pawns attack differently (and cannot move straight to attack).
             if (piece->getType() == PieceType::Pawn) {
                 int dx = x - col;
                 int dy = y - row;
@@ -349,7 +338,6 @@ bool Game::canCastle(Color color, bool kingSide) const {
         if (board.getPieceAt(x, y)) return false;
     }
 
-    // Squares the king crosses must not be attacked.
     Color opponent = (color == Color::White) ? Color::Black : Color::White;
     for (int x : {kingX + (kingSide ? 1 : -1), kingToX}) {
         if (isSquareAttacked(x, y, opponent)) return false;
@@ -374,10 +362,25 @@ int Game::getMoveCount() const {
     return moveCount;
 }
 
+std::string Game::getPlayerName(Color color) const {
+    return (color == Color::White) ? white.getName() : black.getName();
+}
+
+std::optional<std::pair<int, int>> Game::getEnPassantTarget() const {
+    return enPassantTarget;
+}
+
+void Game::setPlayerName(Color color, const std::string& name) {
+    if (color == Color::White) {
+        white.setName(name);
+    } else {
+        black.setName(name);
+    }
+}
+
 bool Game::isInCheck(Color color) const {
     int kingX = -1, kingY = -1;
 
-    // Locate the king of the given color.
     for (int y = 0; y < 8; ++y) {
         for (int x = 0; x < 8; ++x) {
             auto piece = board.getPieceAt(x, y);
@@ -391,7 +394,6 @@ bool Game::isInCheck(Color color) const {
 
     if (kingX == -1 || kingY == -1) return false;
 
-    // See if any opposing piece can attack the king's square.
     return isSquareAttacked(kingX, kingY, (color == Color::White) ? Color::Black : Color::White);
 }
 
@@ -400,6 +402,8 @@ void Game::saveToFile(const std::string& filename) {
 
     j["turn"] = (currentPlayer == Color::White) ? "white" : "black";
     j["move_count"] = moveCount;
+    j["white_name"] = white.getName();
+    j["black_name"] = black.getName();
     if (enPassantTarget) {
         j["en_passant"] = { {"x", enPassantTarget->first}, {"y", enPassantTarget->second} };
     } else {
@@ -414,7 +418,7 @@ void Game::saveToFile(const std::string& filename) {
         for (int x = 0; x < 8; ++x) {
             auto piece = board.getPieceAt(x, y);
             if (piece) {
-                row.push_back(std::string(1, piece->getSymbol()));  // �� char ��' string
+                row.push_back(std::string(1, piece->getSymbol()));
                 movedRow.push_back(piece->hasMoved());
             } else {
                 row.push_back(".");
@@ -429,7 +433,7 @@ void Game::saveToFile(const std::string& filename) {
 
     std::ofstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "Nem sikerƕlt megnyitni a f��jlt ��r��sra: " << filename << "\n";
+        std::cerr << "Could not open file for writing: " << filename << "\n";
         return;
     }
     file << std::setw(4) << j;
@@ -438,7 +442,7 @@ void Game::saveToFile(const std::string& filename) {
 void Game::loadFromFile(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "Nem sikerƕlt megnyitni a f��jlt: " << filename << "\n";
+        std::cerr << "Could not open file: " << filename << "\n";
         return;
     }
 
@@ -450,6 +454,8 @@ void Game::loadFromFile(const std::string& filename) {
     currentPlayer = (turnStr == "white") ? Color::White : Color::Black;
     whiteTurn = (currentPlayer == Color::White);
     moveCount = j["move_count"];
+    if (j.contains("white_name")) white.setName(j["white_name"]);
+    if (j.contains("black_name")) black.setName(j["black_name"]);
     if (j.contains("en_passant") && !j["en_passant"].is_null()) {
         enPassantTarget = std::make_pair(j["en_passant"]["x"].get<int>(), j["en_passant"]["y"].get<int>());
     } else {
@@ -471,7 +477,7 @@ void Game::loadFromFile(const std::string& filename) {
                 if (hasMovedData) {
                     piece->setMoved(movedData[y][x]);
                 }
-                board.setPieceAt(x, y, piece); // �� char, x, y
+                board.setPieceAt(x, y, piece);
             } else {
                 board.setPieceAt(x, y, nullptr);
             }

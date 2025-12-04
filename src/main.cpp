@@ -5,6 +5,7 @@
 #include <iostream>
 #include <optional>
 #include <sstream>
+#include <string>
 
 namespace {
 const std::string kSaveFile = "savegame.json";
@@ -40,18 +41,19 @@ void printBoard(const Game& game) {
 }
 
 void printHelp() {
-    std::cout << "\nElérhető parancsok:\n"
-              << "  move <from> <to>  - például: move e2 e4\n"
-              << "  undo              - utolsó lépés visszavonása\n"
-              << "  show              - tábla kirajzolása\n"
-              << "  save              - állás mentése (savegame.json)\n"
-              << "  load              - állás betöltése (savegame.json)\n"
-              << "  help              - parancsok listája\n"
-              << "  quit              - kilépés a játékból\n";
+    std::cout << "\nAvailable commands:\n"
+              << "  move <from> <to>        - e.g. move e2 e4\n"
+              << "  undo                    - undo last move\n"
+              << "  show                    - print board\n"
+              << "  save                    - save game (savegame.json)\n"
+              << "  load                    - load game (savegame.json)\n"
+              << "  name <white|black> <name> - set player name\n"
+              << "  help                    - show this help\n"
+              << "  quit                    - exit game\n";
 }
 
 PieceType promptPromotionChoice() {
-    std::cout << "Válassz promóciós figurát (q = vezér, r = bástya, b = futó, n = huszár). Alapértelmezett: vezér: ";
+    std::cout << "Choose promotion piece (q = queen, r = rook, b = bishop, n = knight). Default: queen: ";
     std::string input;
     std::getline(std::cin, input);
     if (input.empty()) return PieceType::Queen;
@@ -71,20 +73,23 @@ int main() {
 
     std::ifstream infile(kSaveFile);
     if (infile.good()) {
-        std::cout << "Korábbi mentés betöltése..." << std::endl;
+        std::cout << "Loading previous save..." << std::endl;
         game.loadFromFile(kSaveFile);
     } else {
-        std::cout << "Új játék indítása..." << std::endl;
+        std::cout << "Starting new game..." << std::endl;
         game.start();
     }
 
-    std::cout << "Sakkjáték elindult!" << std::endl;
+    std::cout << "Chess game started!" << std::endl;
     printBoard(game);
     printHelp();
 
     std::string line;
     while (true) {
-        std::cout << '\n' << (game.isWhiteTurn() ? "Fehér" : "Fekete") << " következik > ";
+        std::cout << '\n'
+                  << (game.isWhiteTurn() ? game.getPlayerName(Color::White)
+                                          : game.getPlayerName(Color::Black))
+                  << " to move > ";
         if (!std::getline(std::cin, line)) {
             break;
         }
@@ -99,13 +104,13 @@ int main() {
             std::string from, to;
             ss >> from >> to;
             if (from.empty() || to.empty()) {
-                std::cout << "Használat: move <from> <to> (pl. move e2 e4)";
+                std::cout << "Usage: move <from> <to> (e.g. move e2 e4)";
                 continue;
             }
             auto fromCoord = parseSquare(from);
             auto toCoord = parseSquare(to);
             if (!fromCoord || !toCoord) {
-                std::cout << "Érvénytelen mező. Engedélyezett formátum: a1-h8.";
+                std::cout << "Invalid square. Use a1-h8.";
                 continue;
             }
 
@@ -121,46 +126,84 @@ int main() {
             int beforeMoves = game.getMoveCount();
             game.makeMove(fromCoord->first, fromCoord->second, toCoord->first, toCoord->second, promotionChoice);
             if (game.getMoveCount() == beforeMoves) {
-                std::cout << "A lépés érvénytelen.";
+                std::cout << "Illegal move.";
             } else {
-                std::cout << "Lépés rögzítve.";
-                printBoard(game);
+                std::cout << "Move recorded.";
+
+                if (game.isCheckmate()) {
+                    Color winner = game.isWhiteTurn() ? Color::Black : Color::White;
+                    std::cout << "\nCheckmate! " << game.getPlayerName(winner) << " wins.\n";
+                    printBoard(game);
+                    break;
+                } else if (game.isStalemate()) {
+                    std::cout << "\nStalemate. Draw.\n";
+                    printBoard(game);
+                    break;
+                } else {
+                    Color toMove = game.getCurrentPlayer();
+                    if (game.isInCheck(toMove)) {
+                        std::cout << " Check! " << game.getPlayerName(toMove) << " is in check.";
+                    }
+                    printBoard(game);
+                }
             }
         } else if (command == "undo") {
             if (game.getMoveCount() == 0) {
-                std::cout << "Nincs visszavonható lépés.";
+                std::cout << "No moves to undo.";
                 continue;
             }
             game.undoMove();
-            std::cout << "Utolsó lépés visszavonva.";
+            std::cout << "Last move undone.";
             printBoard(game);
         } else if (command == "show") {
             printBoard(game);
         } else if (command == "save") {
             game.saveToFile(kSaveFile);
-            std::cout << "Állás elmentve: " << kSaveFile;
+            std::cout << "Saved to: " << kSaveFile;
         } else if (command == "load") {
             std::ifstream check(kSaveFile);
             if (!check.good()) {
-                std::cout << "Nincs mentett állás a " << kSaveFile << " fájlban.";
+                std::cout << "No saved game in " << kSaveFile << ".";
                 continue;
             }
             game.loadFromFile(kSaveFile);
-            std::cout << "Állás betöltve.";
+            std::cout << "Game loaded.";
             printBoard(game);
+        } else if (command == "name") {
+            std::string colorStr;
+            ss >> colorStr;
+            std::string newName;
+            std::getline(ss, newName);
+            if (colorStr.empty() || newName.empty()) {
+                std::cout << "Usage: name <white|black> <name>";
+                continue;
+            }
+            newName.erase(newName.begin(),
+                          std::find_if(newName.begin(), newName.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+            std::transform(colorStr.begin(), colorStr.end(), colorStr.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (colorStr == "white") {
+                game.setPlayerName(Color::White, newName);
+                std::cout << "White player is now: " << newName;
+            } else if (colorStr == "black") {
+                game.setPlayerName(Color::Black, newName);
+                std::cout << "Black player is now: " << newName;
+            } else {
+                std::cout << "Unknown color. Usage: name <white|black> <name>";
+            }
         } else if (command == "help") {
             printHelp();
         } else if (command == "quit" || command == "exit") {
-            std::cout << "Kilépés...";
+            std::cout << "Exiting...";
             break;
         } else {
-            std::cout << "Ismeretlen parancs. Írd be, hogy 'help' a lista megjelenítéséhez.";
+            std::cout << "Unknown command. Type 'help' for the list.";
         }
     }
 
-    std::cout << "\nJáték mentése JSON fájlba..." << std::endl;
+    std::cout << "\nSaving game to JSON..." << std::endl;
     game.saveToFile(kSaveFile);
 
-    std::cout << "Mentés kész. Viszlát!" << std::endl;
+    std::cout << "Save complete. Goodbye!" << std::endl;
     return 0;
 }

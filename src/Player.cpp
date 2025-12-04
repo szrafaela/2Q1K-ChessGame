@@ -5,3 +5,4 @@ Player::Player(const std::string& name, Color color)
 
 std::string Player::getName() const { return name; }
 Color Player::getColor() const { return color; }
+void Player::setName(const std::string& newName) { name = newName; }

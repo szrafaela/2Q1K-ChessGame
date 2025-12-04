@@ -22,6 +22,9 @@ public:
     bool isWhiteTurn() const;
     Color getCurrentPlayer() const;
     int getMoveCount() const;
+    std::string getPlayerName(Color color) const;
+    void setPlayerName(Color color, const std::string& name);
+    std::optional<std::pair<int, int>> getEnPassantTarget() const;
     bool isInCheck(Color color) const;
 
     // JSON ment�cs/bet�lt�cs
