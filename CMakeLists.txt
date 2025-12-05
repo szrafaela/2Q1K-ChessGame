@@ -8,6 +8,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(BUILD_SHARED_LIBS OFF) # Build everything statically so the final exe has no DLL dependencies.
 
+# Enable CTest so gtest_discover_tests can register tests.
+include(CTest)
+enable_testing()
+
 if(MSVC)
   # Link the static runtime (/MT or /MTd) to avoid requiring the Visual C++ redistributable DLLs.
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
