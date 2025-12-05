@@ -27,3 +27,7 @@ A játék a szabálykezeléshez, lépések nyilvántartásához és mentéséhez
 ### Tesztesetek
 
 A játék működésének tesztelése során ellenőrizzük a szabályos és szabálytalan lépéseket, a sakk- és matthelyzetek felismerését, a lépések visszavonását, valamint a mentés és betöltés funkciók helyes működését.
+
+# Build windows-on:
+cmake -S . -B build-win -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+cmake --build build-win --config Release
