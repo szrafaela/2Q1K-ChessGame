@@ -5,12 +5,17 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
-#include <stdexcept>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #endif
 
 namespace {
@@ -30,8 +35,17 @@ std::optional<std::pair<int, int>> parseSquare(const std::string& coord) {
 std::string resolveEnginePath() {
     // Try paths relative to the executable working directory and build directory.
     std::vector<std::string> candidates = {
+        // Windows bundled engine
         "external\\stockfish\\stockfish-windows-x86-64-avx2.exe",
         "..\\external\\stockfish\\stockfish-windows-x86-64-avx2.exe"
+#ifndef _WIN32
+        ,
+        // Linux package locations and PATH
+        "/usr/games/stockfish",
+        "/usr/bin/stockfish",
+        "/usr/local/bin/stockfish",
+        "stockfish"
+#endif
     };
     for (const auto& p : candidates) {
         if (std::filesystem::exists(p)) return p;
@@ -86,10 +100,10 @@ PieceType promptPromotionChoice() {
     }
 }
 
-#ifdef _WIN32
 class StockfishProcess {
 public:
     bool start(const std::string& path, int skillLevel) {
+#ifdef _WIN32
         SECURITY_ATTRIBUTES saAttr{};
         saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
         saAttr.bInheritHandle = TRUE;
@@ -122,7 +136,45 @@ public:
 
         if (!success) return false;
         running = true;
+        childStdoutRdValid = true;
+        childStdoutWrValid = true;
+        childStdinRdValid = true;
+        childStdinWrValid = true;
+#else
+        int stdinPipe[2];
+        int stdoutPipe[2];
+        if (pipe(stdinPipe) != 0) return false;
+        if (pipe(stdoutPipe) != 0) {
+            close(stdinPipe[0]);
+            close(stdinPipe[1]);
+            return false;
+        }
+        pid_t pid = fork();
+        if (pid == 0) {
+            dup2(stdinPipe[0], STDIN_FILENO);
+            dup2(stdoutPipe[1], STDOUT_FILENO);
+            dup2(stdoutPipe[1], STDERR_FILENO);
+            close(stdinPipe[0]);
+            close(stdinPipe[1]);
+            close(stdoutPipe[0]);
+            close(stdoutPipe[1]);
+            execl(path.c_str(), path.c_str(), static_cast<char*>(nullptr));
+            _exit(1);
+        } else if (pid < 0) {
+            close(stdinPipe[0]);
+            close(stdinPipe[1]);
+            close(stdoutPipe[0]);
+            close(stdoutPipe[1]);
+            return false;
+        }
 
+        childPid = pid;
+        childStdinFd = stdinPipe[1];
+        childStdoutFd = stdoutPipe[0];
+        close(stdinPipe[0]);
+        close(stdoutPipe[1]);
+        running = true;
+#endif
         send("uci\n");
         send("setoption name Skill Level value " + std::to_string(skillLevel) + "\n");
         send("isready\n");
@@ -133,28 +185,44 @@ public:
     bool isRunning() const { return running; }
 
     void stop() {
-        if (running) {
-            send("quit\n");
-            CloseHandle(childStdoutWr);
-            CloseHandle(childStdinRd);
-            CloseHandle(childStdinWr);
-            CloseHandle(childStdoutRd);
-            WaitForSingleObject(pi.hProcess, 1000);
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-            running = false;
-        }
+        if (!running) return;
+        send("quit\n");
+#ifdef _WIN32
+        if (childStdoutWrValid) CloseHandle(childStdoutWr);
+        if (childStdinRdValid) CloseHandle(childStdinRd);
+        if (childStdinWrValid) CloseHandle(childStdinWr);
+        if (childStdoutRdValid) CloseHandle(childStdoutRd);
+        WaitForSingleObject(pi.hProcess, 1000);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        childStdoutWrValid = childStdinRdValid = childStdinWrValid = childStdoutRdValid = false;
+#else
+        close(childStdinFd);
+        int status = 0;
+        waitpid(childPid, &status, 0);
+        close(childStdoutFd);
+        childStdinFd = -1;
+        childStdoutFd = -1;
+        childPid = -1;
+#endif
+        running = false;
     }
 
     bool send(const std::string& msg) const {
         if (!running) return false;
+#ifdef _WIN32
         DWORD written = 0;
         return WriteFile(childStdinWr, msg.c_str(), static_cast<DWORD>(msg.size()), &written, nullptr);
+#else
+        ssize_t written = write(childStdinFd, msg.c_str(), msg.size());
+        return written == static_cast<ssize_t>(msg.size());
+#endif
     }
 
     std::string readLine() const {
         std::string line;
         char ch = 0;
+#ifdef _WIN32
         DWORD read = 0;
         while (true) {
             if (!ReadFile(childStdoutRd, &ch, 1, &read, nullptr) || read == 0) break;
@@ -162,6 +230,16 @@ public:
             if (ch == '\n') break;
             line.push_back(ch);
         }
+#else
+        ssize_t readBytes = 0;
+        while (true) {
+            readBytes = read(childStdoutFd, &ch, 1);
+            if (readBytes <= 0) break;
+            if (ch == '\r') continue;
+            if (ch == '\n') break;
+            line.push_back(ch);
+        }
+#endif
         return line;
     }
 
@@ -196,14 +274,23 @@ public:
     }
 
 private:
+#ifdef _WIN32
     HANDLE childStdoutRd = nullptr;
     HANDLE childStdoutWr = nullptr;
     HANDLE childStdinRd = nullptr;
     HANDLE childStdinWr = nullptr;
     PROCESS_INFORMATION pi{};
+    bool childStdoutRdValid = false;
+    bool childStdoutWrValid = false;
+    bool childStdinRdValid = false;
+    bool childStdinWrValid = false;
+#else
+    int childStdoutFd = -1;
+    int childStdinFd = -1;
+    pid_t childPid = -1;
+#endif
     bool running = false;
 };
-#endif
 
 std::string coordsToUci(int fromX, int fromY, int toX, int toY, std::optional<PieceType> promo = std::nullopt) {
     auto toFile = [](int x) { return static_cast<char>('a' + x); };
@@ -260,24 +347,20 @@ void applyEngineMove(Game& game, const std::string& mv) {
 
 int main() {
     Game game;
-#ifdef _WIN32
     StockfishProcess engine;
     bool engineEnabled = false;
     Color engineColor = Color::Black;
     int engineMovetimeMs = 1000;
     std::vector<std::string> uciMoves;
-#endif
 
     auto restartGame = [&](const std::string& message) {
         std::cout << message
                   << "\nGame over. Starting a new game. Type 'quit' to exit if you are done.\n";
         game.start();
-#ifdef _WIN32
         uciMoves.clear();
         if (engine.isRunning()) {
             engine.send("ucinewgame\n");
         }
-#endif
         printBoard(game);
     };
 
@@ -338,10 +421,8 @@ int main() {
             if (game.getMoveCount() == beforeMoves) {
                 std::cout << "Illegal move.";
             } else {
-#ifdef _WIN32
                 uciMoves.push_back(coordsToUci(fromCoord->first, fromCoord->second, toCoord->first, toCoord->second,
                                                (promotionChoice != PieceType::Queen) ? std::optional<PieceType>(promotionChoice) : std::nullopt));
-#endif
                 std::cout << "Move recorded.";
 
                 if (game.isCheckmate()) {
@@ -360,7 +441,6 @@ int main() {
                     }
                     printBoard(game);
 
-#ifdef _WIN32
                     if (engineEnabled && game.getCurrentPlayer() == engineColor && engine.isRunning()) {
                         std::cout << "\nEngine thinking..." << std::endl;
                         std::string best = engine.bestMove(uciMoves, engineMovetimeMs);
@@ -393,7 +473,6 @@ int main() {
                             std::cout << "Engine failed to return a move.\n";
                         }
                     }
-#endif
                 }
             }
         } else if (command == "undo") {
@@ -402,9 +481,7 @@ int main() {
                 continue;
             }
             game.undoMove();
-#ifdef _WIN32
             if (!uciMoves.empty()) uciMoves.pop_back();
-#endif
             std::cout << "Last move undone.";
             printBoard(game);
         } else if (command == "show") {
@@ -443,7 +520,6 @@ int main() {
             } else {
                 std::cout << "Unknown color. Usage: name <white|black> <name>";
             }
-#ifdef _WIN32
         } else if (command == "stockfish") {
             std::cout << "Set skill level (0-20). Default: 10: ";
             std::string skillStr;
@@ -480,7 +556,6 @@ int main() {
                 std::cout << "Engine started as " << (engineColor == Color::White ? "White" : "Black")
                           << " with skill " << skill << ".";
             }
-#endif
         } else if (command == "help") {
             printHelp();
         } else if (command == "quit" || command == "exit") {
@@ -495,8 +570,6 @@ int main() {
     game.saveToFile(kSaveFile);
 
     std::cout << "Save complete. Goodbye!" << std::endl;
-#ifdef _WIN32
     engine.stop();
-#endif
     return 0;
 }
