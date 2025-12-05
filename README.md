@@ -30,4 +30,16 @@ A játék működésének tesztelése során ellenőrizzük a szabályos és sza
 
 # Build windows-on:
 cmake -S . -B build-win -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+
 cmake --build build-win --config Release
+
+# Tesztek futtatása windows-on:
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+
+cmake --build build --config Debug
+
+ctest --test-dir build -C Debug
+
+# Docker build: 
+
+docker build -t chessgame .
