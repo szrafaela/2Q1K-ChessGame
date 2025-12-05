@@ -6,6 +6,17 @@ project(ChessGame)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(BUILD_SHARED_LIBS OFF) # Build everything statically so the final exe has no DLL dependencies.
+
+if(MSVC)
+  # Link the static runtime (/MT or /MTd) to avoid requiring the Visual C++ redistributable DLLs.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+  set(gtest_force_shared_crt OFF CACHE BOOL "Use shared (DLL) CRT for GoogleTest" FORCE)
+elseif(MINGW)
+  # Statically link libstdc++, libgcc, and pthreads on MinGW to avoid extra DLLs.
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -static-libgcc -static-libstdc++")
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+endif()
 
 include(FetchContent)
 
