@@ -43,3 +43,6 @@ ctest --test-dir build -C Debug
 # Docker build: 
 
 docker build -t chessgame .
+
+# Stockfish
+A gép ellen való játékhoz szükséges letölteni a stockfish binárist, docker image-be bele van építve, docker esetén müködik out of the box.
